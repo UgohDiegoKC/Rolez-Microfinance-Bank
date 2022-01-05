@@ -1,0 +1,164 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "type": "String",
+            "metadata": {
+                "description": "Location"
+            }
+        },
+        "vnetNewOrExisting": {
+            "type": "String"
+        },
+        "vnetName": {
+            "type": "String",
+            "metadata": {
+                "description": "Virtual Network name (e.g. vnet-haivision)"
+            }
+        },
+        "vnetAddressPrefix": {
+            "type": "String",
+            "metadata": {
+                "description": "Virtual Network Address Prefix (i.e. CIDR)"
+            }
+        },
+        "Subnet1Name": {
+            "type": "String",
+            "metadata": {
+                "description": "Server will be deployed into this subnet within the Virtual Network"
+            }
+        },
+        "subnet1AddressPrefix": {
+            "type": "String",
+            "metadata": {
+                "description": "Virtual Network subnet Address Prefix (i.e. CIDR)"
+            }
+        },
+        "subnet1NextHop": {
+            "type": "String"
+        },
+        "Subnet2Name": {
+            "type": "String",
+            "metadata": {
+                "description": "Server will be deployed into this subnet within the Virtual Network"
+            }
+        },
+        "subnet2AddressPrefix": {
+            "type": "String",
+            "metadata": {
+                "description": "Virtual Network subnet Address Prefix (i.e. CIDR)"
+            }
+        },
+        "subnet2NextHop": {
+            "type": "String"
+        },
+        "routeTable1Name": {
+            "type": "String"
+        },
+        "routeTable2Name": {
+            "type": "String"
+        },
+        "FortinetTags": {
+            "type": "Object"
+        }
+    },
+    "variables": {
+        "routeTable1Id": "[resourceId('Microsoft.Network/routeTables',parameters('routeTable1Name'))]",
+        "routeTable2Id": "[resourceId('Microsoft.Network/routeTables',parameters('routeTable2Name'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/routeTables",
+            "apiVersion": "2017-10-01",
+            "name": "[parameters('routeTable1Name')]",
+            "location": "[parameters('location')]",
+            "tags": {
+                "provider": "[toUpper(parameters('FortinetTags').provider)]"
+            },
+            "properties": {
+                "routes": [
+                    {
+                        "name": "[concat('to', '-', parameters('Subnet2Name'))]",
+                        "properties": {
+                            "addressPrefix": "[parameters('subnet2AddressPrefix')]",
+                            "nextHopType": "VirtualAppliance",
+                            "nextHopIpAddress": "[parameters('subnet1NextHop')]"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/routeTables",
+            "apiVersion": "2017-10-01",
+            "name": "[parameters('routeTable2Name')]",
+            "location": "[parameters('location')]",
+            "tags": {
+                "provider": "[toUpper(parameters('FortinetTags').provider)]"
+            },
+            "properties": {
+                "routes": [
+                    {
+                        "name": "[concat('to', '-', parameters('Subnet1Name'))]",
+                        "properties": {
+                            "addressPrefix": "[parameters('subnet1AddressPrefix')]",
+                            "nextHopType": "VirtualAppliance",
+                            "nextHopIpAddress": "[parameters('subnet2NextHop')]"
+                        }
+                    },
+                    {
+                        "name": "to-Internet",
+                        "properties": {
+                            "AddressPrefix": "0.0.0.0/0",
+                            "nextHopType": "VirtualAppliance",
+                            "nextHopIPAddress": "[parameters('subnet2NextHop')]"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "apiVersion": "2017-10-01",
+            "name": "[parameters('vnetName')]",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[parameters('routeTable1Name')]",
+                "[parameters('routeTable2Name')]"
+            ],
+            "tags": {
+                "provider": "[toUpper(parameters('FortinetTags').provider)]"
+            },
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[parameters('vnetAddressPrefix')]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[parameters('Subnet1Name')]",
+                        "properties": {
+                            "addressPrefix": "[parameters('subnet1AddressPrefix')]",
+                            "routeTable": {
+                                "id": "[variables('routeTable1Id')]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "[parameters('Subnet2Name')]",
+                        "properties": {
+                            "addressPrefix": "[parameters('Subnet2AddressPrefix')]",
+                            "routeTable": {
+                                "id": "[variables('routeTable2Id')]"
+                            }
+                        }
+                    }
+                ]
+            },
+            "condition": "[equals(parameters('vnetNewOrExisting'), 'new')]"
+        }
+    ],
+    "outputs": {}
+}
